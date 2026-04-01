@@ -1,0 +1,13 @@
+__pycache__/
+*.pyc
+*.pyo
+*.log
+.venv/
+env/
+data/raw/
+logs/
+outputs/
+*.hdf5
+*.pt
+*.pth
+.vscode/
