@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot-robot-ur-medicine"
+version = "0.1.0"
+description = "Minimal LeRobot-compatible UR medicine robot plugin"
+requires-python = ">=3.10"
+dependencies = ["ur-rtde>=1.5,<2"]
+
+[tool.setuptools]
+packages = ["lerobot_robot_ur_medicine"]

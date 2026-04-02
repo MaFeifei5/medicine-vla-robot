@@ -47,6 +47,7 @@ class Gripper:
         self.timeout = float(timeout)
         self.legacy_root = Path(legacy_root).expanduser()
         self._driver = None
+        self._last_position = 255
 
     def connect(self) -> bool:
         """Open the serial connection to the gripper."""
@@ -89,6 +90,11 @@ class Gripper:
             LOGGER.info("Gripper disconnected from %s", self.port)
             self._driver = None
 
+    def get_state(self) -> float:
+        """Return the last commanded opening state normalized to [0, 1]."""
+
+        return max(0.0, min(1.0, float(self._last_position) / 255.0))
+
     def _ensure_ready(self) -> None:
         if self._driver is None and not self.connect():
             raise RuntimeError("Gripper is not connected")
@@ -99,6 +105,8 @@ class Gripper:
         self._ensure_ready()
         LOGGER.info("Opening gripper with speed=%s torque=%s", speed, torque)
         success = bool(self._driver.open_gripper(speed=speed, torque=torque))
+        if success:
+            self._last_position = 255
         if not success:
             LOGGER.error("Gripper open command failed")
         return success
@@ -109,6 +117,8 @@ class Gripper:
         self._ensure_ready()
         LOGGER.info("Closing gripper with tightness=%s speed=%s", tightness, speed)
         success = bool(self._driver.close_gripper(tightness=tightness, speed=speed))
+        if success:
+            self._last_position = 0
         if not success:
             LOGGER.error("Gripper close command failed")
         return success
@@ -139,6 +149,8 @@ class Gripper:
             dec=int(dec),
             trigger=1,
         )
+        if success:
+            self._last_position = clipped_position
         if not success:
             LOGGER.error("Failed to set gripper opening to %s", clipped_position)
         return bool(success)

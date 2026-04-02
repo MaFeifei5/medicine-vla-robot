@@ -1,0 +1,13 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lerobot-teleoperator-keyboard-ur"
+version = "0.1.0"
+description = "Minimal LeRobot-compatible keyboard teleoperator for UR medicine robot"
+requires-python = ">=3.10"
+dependencies = ["pynput>=1.7,<2"]
+
+[tool.setuptools]
+packages = ["lerobot_teleoperator_keyboard_ur"]
