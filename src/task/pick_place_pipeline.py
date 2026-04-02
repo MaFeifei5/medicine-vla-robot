@@ -8,7 +8,7 @@ from typing import Dict, Mapping, Optional, Sequence
 from src.gripper.gripper_adapter import Gripper
 from src.robot.ur_adapter import URRobotAdapter
 
-DEFAULT_LEGACY_POSE_FILE = Path("/home/nav/JuShen_new/funcs/ur_pos.yaml")
+DEFAULT_POSE_FILE = Path(__file__).resolve().parents[2] / "config" / "ur_pos.yaml"
 
 
 def _normalize_pose(name: str, pose: Sequence[float]) -> list[float]:
@@ -41,9 +41,9 @@ class PickPlacePipeline:
         cls,
         robot: URRobotAdapter,
         gripper: Gripper,
-        pose_file: Path | str = DEFAULT_LEGACY_POSE_FILE,
+        pose_file: Path | str = DEFAULT_POSE_FILE,
     ) -> "PickPlacePipeline":
-        """Build the pipeline from a legacy pose YAML file."""
+        """Build the pipeline from the project pose YAML file."""
 
         try:
             import yaml
