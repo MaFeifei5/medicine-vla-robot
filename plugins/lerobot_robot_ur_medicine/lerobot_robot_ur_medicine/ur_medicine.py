@@ -75,18 +75,26 @@ class L515FrameSource:
         width: int,
         height: int,
         fps: int,
+        depth_width: int | None = None,
+        depth_height: int | None = None,
+        depth_fps: int | None = None,
         serial: str | None = None,
         use_mock_camera: bool = False,
     ) -> None:
         self.width = int(width)
         self.height = int(height)
         self.fps = int(fps)
+        self.depth_width = int(depth_width if depth_width is not None else width)
+        self.depth_height = int(depth_height if depth_height is not None else height)
+        self.depth_fps = int(depth_fps if depth_fps is not None else fps)
         self.serial = serial
         self.use_mock_camera = bool(use_mock_camera)
         self._pipeline = None
         self._align = None
         self._rs = None
         self._started = False
+        self._active_color_profile = (self.width, self.height, self.fps)
+        self._active_depth_profile = (self.depth_width, self.depth_height, self.depth_fps)
 
     def connect(self) -> bool:
         if self.use_mock_camera:
@@ -102,29 +110,87 @@ class L515FrameSource:
                 "Use use_mock_camera=True for dry runs."
             ) from exc
 
-        config = rs.config()
-        if self.serial:
-            config.enable_device(self.serial)
-        config.enable_stream(rs.stream.color, self.width, self.height, rs.format.rgb8, self.fps)
-        config.enable_stream(rs.stream.depth, self.width, self.height, rs.format.z16, self.fps)
+        profile_candidates = []
+        seen_profiles: set[tuple[int, int, int, int, int, int]] = set()
+
+        def add_candidate(
+            color_width: int,
+            color_height: int,
+            color_fps: int,
+            depth_width: int,
+            depth_height: int,
+            depth_fps: int,
+        ) -> None:
+            candidate = (
+                int(color_width),
+                int(color_height),
+                int(color_fps),
+                int(depth_width),
+                int(depth_height),
+                int(depth_fps),
+            )
+            if candidate not in seen_profiles:
+                profile_candidates.append(candidate)
+                seen_profiles.add(candidate)
+
+        add_candidate(
+            self.width,
+            self.height,
+            self.fps,
+            self.depth_width,
+            self.depth_height,
+            self.depth_fps,
+        )
+        # L515 over USB 2.x often needs a lower color FPS even when rs-enumerate-devices
+        # lists the individual stream profiles separately.
+        add_candidate(640, 480, 30, 320, 240, 30)
+        add_candidate(640, 480, 15, 320, 240, 30)
+        add_candidate(640, 480, 6, 320, 240, 30)
 
         pipeline = rs.pipeline()
-        try:
-            pipeline.start(config)
-        except Exception as exc:
+        last_error: Exception | None = None
+        for color_width, color_height, color_fps, depth_width, depth_height, depth_fps in profile_candidates:
+            config = rs.config()
+            if self.serial:
+                config.enable_device(self.serial)
+            config.enable_stream(rs.stream.color, color_width, color_height, rs.format.rgb8, color_fps)
+            config.enable_stream(rs.stream.depth, depth_width, depth_height, rs.format.z16, depth_fps)
             try:
-                pipeline.stop()
-            except Exception:
-                pass
+                pipeline.start(config)
+                self._active_color_profile = (color_width, color_height, color_fps)
+                self._active_depth_profile = (depth_width, depth_height, depth_fps)
+                if (color_width, color_height, color_fps, depth_width, depth_height, depth_fps) != profile_candidates[0]:
+                    LOGGER.warning(
+                        "Falling back to L515-compatible profile color=%sx%s@%s depth=%sx%s@%s",
+                        color_width,
+                        color_height,
+                        color_fps,
+                        depth_width,
+                        depth_height,
+                        depth_fps,
+                    )
+                break
+            except Exception as exc:
+                last_error = exc
+                try:
+                    pipeline.stop()
+                except Exception:
+                    pass
+        else:
             raise RuntimeError(
-                "Failed to start L515 camera. Check USB/power connection or rerun with --mock-camera."
-            ) from exc
+                "Failed to start L515 camera. Requested stream profile is unsupported on the current USB link. "
+                f"Try a USB 3 port/cable or rerun with --mock-camera. Last error: {last_error}"
+            ) from last_error
 
         self._pipeline = pipeline
         self._align = rs.align(rs.stream.color)
         self._rs = rs
         self._started = True
-        LOGGER.info("Connected to L515 camera stream %sx%s@%s", self.width, self.height, self.fps)
+        LOGGER.info(
+            "Connected to L515 camera color=%sx%s@%s depth=%sx%s@%s",
+            *self._active_color_profile,
+            *self._active_depth_profile,
+        )
         return True
 
     def disconnect(self) -> None:
@@ -166,14 +232,14 @@ class L515FrameSource:
         return {
             "top_rgb": {
                 "encoding": "rgb8",
-                "width": self.width,
-                "height": self.height,
+                "width": color_frame.get_width(),
+                "height": color_frame.get_height(),
                 "data": bytes(color_frame.get_data()),
             },
             "top_depth": {
                 "encoding": "z16",
-                "width": self.width,
-                "height": self.height,
+                "width": depth_frame.get_width(),
+                "height": depth_frame.get_height(),
                 "data": bytes(depth_frame.get_data()),
             },
         }
@@ -206,6 +272,9 @@ class URMedicineRobot(LeRobotRobot):
             width=config.top_camera_width,
             height=config.top_camera_height,
             fps=config.top_camera_fps,
+            depth_width=config.top_camera_depth_width,
+            depth_height=config.top_camera_depth_height,
+            depth_fps=config.top_camera_depth_fps,
             serial=config.top_camera_serial,
             use_mock_camera=config.use_mock_camera,
         )

@@ -44,6 +44,9 @@ class URMedicineRobotConfig(LeRobotRobotConfig):
     top_camera_width: int = 640
     top_camera_height: int = 480
     top_camera_fps: int = 30
+    top_camera_depth_width: int = 320
+    top_camera_depth_height: int = 240
+    top_camera_depth_fps: int = 30
     use_mock_camera: bool = False
     use_speed_control: bool = True
     control_period_s: float = 0.02
